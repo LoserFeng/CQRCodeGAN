@@ -192,7 +192,7 @@ class SingleModel(BaseModel):
             loss_D_fake = pred_fake.mean()
             loss_D = loss_D_fake - loss_D_real + self.criterionGAN.calc_gradient_penalty(netD, 
                                                 real.data, fake.data)
-        elif self.opt.use_ragan and use_ragan:       #true
+        elif self.opt.use_ragan and use_ragan:       #true ragan
             loss_D = (self.criterionGAN(pred_real - torch.mean(pred_fake), True) +
                                       self.criterionGAN(pred_fake - torch.mean(pred_real), False)) / 2
         else:
@@ -204,7 +204,7 @@ class SingleModel(BaseModel):
 
     def backward_D_A(self):
         fake_B = self.fake_B_pool.query(self.fake_B)
-        fake_B = self.fake_B
+        fake_B = self.fake_B  # ?????
         self.loss_D_A = self.backward_D_basic(self.netD_A, self.real_B, fake_B, True)
         self.loss_D_A.backward()
     
@@ -240,9 +240,9 @@ class SingleModel(BaseModel):
         if self.opt.noise > 0:
             self.noise = Variable(torch.cuda.FloatTensor(self.real_A.size()).normal_(mean=0, std=self.opt.noise/255.))
             self.real_A = self.real_A + self.noise
-        if self.opt.input_linear:
+        if self.opt.input_linear:  # False
             self.real_A = (self.real_A - torch.min(self.real_A))/(torch.max(self.real_A) - torch.min(self.real_A))
-        if self.opt.skip == 1:
+        if self.opt.skip == 1:  # True
             self.fake_B, self.latent_real_A = self.netG_A.forward(self.real_img, self.real_A_gray)
         else:
             self.fake_B = self.netG_A.forward(self.real_img, self.real_A_gray)
@@ -283,7 +283,7 @@ class SingleModel(BaseModel):
             # self.input_patch_2 = self.real_A[:,:, h_offset_2:h_offset_2 + self.opt.patchSize,
             #        w_offset_2:w_offset_2 + self.opt.patchSize]
 
-    def backward_G(self, epoch):
+    def backward_G(self, epoch):  #backward有forward的过程。。。。。,在这里不要使用ragan
         pred_fake = self.netD_A.forward(self.fake_B)
         if self.opt.use_wgan:
             self.loss_G_A = -pred_fake.mean()
@@ -393,7 +393,7 @@ class SingleModel(BaseModel):
         # self.optimizer_D_B.step()
     def optimize_parameters(self, epoch):
         # forward
-        self.forward()
+        self.forward()  # forward就产生了fake_B
         # G_A and G_B
         self.optimizer_G.zero_grad()
         self.backward_G(epoch)

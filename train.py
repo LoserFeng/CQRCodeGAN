@@ -51,7 +51,7 @@ def main():
                     (epoch, total_steps))
                 model.save('latest')
 
-        if epoch % opt.save_epoch_freq == 0:
+        if epoch % opt.save_epoch_freq == 0 or epoch == 1:
             print('saving the model at the end of epoch %d, iters %d' %
                 (epoch, total_steps))
             model.save('latest')

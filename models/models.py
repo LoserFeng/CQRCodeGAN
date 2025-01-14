@@ -33,10 +33,10 @@ def create_model(opt):
         model = TestModel()
 
 
-    elif opt.model=='QRCode':
+    elif opt.model=='CQRCodeGAN':
         assert(opt.dataset_mode=='unaligned')
-        from .qrcode_model import QRCodeModel
-        model=QRCodeModel()
+        from .qrcode_model import CQRCodeGANModel
+        model=CQRCodeGANModel()
     else:
         raise ValueError("Model [%s] not recognized." % opt.model)
     model.initialize(opt)

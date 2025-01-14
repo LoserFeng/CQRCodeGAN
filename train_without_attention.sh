@@ -10,7 +10,7 @@ nohup python train.py \
     --outputs_dir ./outputs \
     --vgg_pretrained_path checkpoints/vgg \
     --no_dropout \
-    --name CQRCode_GAN \
+    --name CQR_GAN_without_attention \
     --model single \
     --dataset_mode unaligned \
     --which_model_netG sid_unet_resize \
@@ -21,7 +21,7 @@ nohup python train.py \
     --n_layers_D 5 \
     --n_layers_patchD 4 \
     --fineSize 768 \
-    --patchSize 32 \
+    --patchSize 128 \
     --skip 1 \
     --batchSize 4 \
     --use_norm 1 \
@@ -34,5 +34,4 @@ nohup python train.py \
     --vgg_w 1. \
     --vgg_choose relu5_1 \
     --gpu_ids 0 \
-    # --self_attention \
-    --resize_or_crop resize_and_crop > logs/train.log 2>&1 &
+    --resize_or_crop resize_and_crop > logs/train_without_attention.log 2>&1 &

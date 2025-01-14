@@ -75,7 +75,9 @@ class BaseOptions():
         self.parser.add_argument('--latent_threshold', action='store_true', help='lieanr scaling input')
         self.parser.add_argument('--latent_norm', action='store_true', help='lieanr scaling input')
         self.parser.add_argument('--patchD', action='store_true', help='use patch discriminator')
+        self.parser.add_argument('--patch_D', action='store_true', help='use patch discriminator')  # for QRCodeGAN
         self.parser.add_argument('--patchD_3', type=int, default=0, help='choose the number of crop for patch discriminator')
+        self.parser.add_argument('--patch_D_3', type=int, default=0, help='choose the number of crop for patch discriminator') # for QRCodeGAN
         self.parser.add_argument('--D_P_times2', action='store_true', help='loss_D_P *= 2')
         self.parser.add_argument('--patch_vgg', action='store_true', help='use vgg loss between each patch')
         self.parser.add_argument('--hybrid_loss', action='store_true', help='use lsgan and ragan separately')
@@ -84,8 +86,10 @@ class BaseOptions():
         self.parser.add_argument('--low_times', type=int, default=200, help='choose the number of crop for patch discriminator')
         self.parser.add_argument('--high_times', type=int, default=400, help='choose the number of crop for patch discriminator')
         self.parser.add_argument('--norm_attention', action='store_true', help='normalize attention map')
-        self.parser.add_argument('--vary', type=int, default=1, help='use light data augmentation')
+        self.parser.add_argument('--vary', type=int, default=0, help='use light data augmentation')   # 你妈
+        self.parser.add_argument('--lambda_identity', type=int, default=10, help='identity loss beltas')   # 一致性 
         self.parser.add_argument('--lighten', action='store_true', help='normalize attention map')
+        self.parser.add_argument('--attention_model_path', default = './checkpoints/attention_model/best.pt', help='The path to yolov best.pt')
         self.initialized = True
 
     def parse(self):

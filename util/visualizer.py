@@ -171,7 +171,7 @@ class Visualizer:
     def __init__(self, opt):
         self.display_id = opt.display_id
         self.name = opt.name
-        self.output_dir = opt.outputs_dir  # 指定输出目录
+        self.output_dir = os.path.join(opt.outputs_dir,opt.name)  # 指定输出目录
 
         # 创建输出目录（若不存在）
         self.img_dir = os.path.join(self.output_dir, 'images')

@@ -125,3 +125,6 @@ final_dataset/*
 .history/*
 
 ablation/*
+
+outputs/*
+results/*

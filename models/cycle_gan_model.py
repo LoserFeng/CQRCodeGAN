@@ -181,7 +181,7 @@ class CycleGANModel(BaseModel):
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed.
             self.idt_A = self.netG_A.forward(self.real_B)
-            self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
+            self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt  #并没有用上。。。
             # G_B should be identity if real_A is fed.
             self.idt_B = self.netG_B.forward(self.real_A)
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
@@ -246,18 +246,18 @@ class CycleGANModel(BaseModel):
 
     def optimize_parameters(self, epoch):
         # forward
-        self.forward()
+        self.forward()  #这里并么有经过生成器
         # G_A and G_B
         self.optimizer_G.zero_grad()
-        self.backward_G(epoch)
+        self.backward_G(epoch)  #这里才经过了生成器
         self.optimizer_G.step()
         # D_A
         self.optimizer_D_A.zero_grad()
-        self.backward_D_A()
+        self.backward_D_A()  #判断的是fake_B和real_B
         self.optimizer_D_A.step()
         # D_B
         self.optimizer_D_B.zero_grad()
-        self.backward_D_B()
+        self.backward_D_B() #判断的是fake_A和real_A
         self.optimizer_D_B.step()
 
     def get_current_errors(self, epoch):
