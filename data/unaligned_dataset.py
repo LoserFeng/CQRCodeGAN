@@ -15,6 +15,49 @@ from models.experimental import attempt_load
 from pdb import set_trace as st
 import onnxruntime as ort
 
+def simulate_underwater_effect_pil(pil_image):
+    # 将 PIL 图像转换为 NumPy 数组
+    np_img = np.array(pil_image)
+
+    # 调用原先只支持 NumPy 数组的 simulate_underwater_effect
+    # 模拟水下效果，返回 NumPy 数组
+    np_underwater = simulate_underwater_effect(np_img)
+
+    # 将处理后的 NumPy 数组转换回 PIL 图像
+    return Image.fromarray(np_underwater)
+
+def simulate_underwater_effect(image):
+    # 读取图像
+
+
+    # 以30%的概率不进行任何操作
+    if np.random.rand() < 0.2:
+        return image
+
+    # 1. 模拟颜色失真
+    if np.random.rand() < 0.9:
+        color_matrix = np.diag(np.random.uniform(0.8, 1.2, 3))
+        distorted_image = np.clip(np.dot(image / 255.0, color_matrix.T), 0, 1)
+    else:
+        distorted_image = image / 255.0
+
+    # 2. 模拟模糊效果
+    if np.random.rand() < 0.5:
+        kernel_size = tuple(np.random.choice([ 1, 3,5], size=2))
+        sigma = np.random.uniform(1, 5)
+        blurred_image = cv2.GaussianBlur((distorted_image * 255).astype(np.uint8), kernel_size, sigma)
+    else:
+        blurred_image = (distorted_image * 255).astype(np.uint8)
+
+    # 3. 降低对比度
+    if np.random.rand() < 0.5:
+        alpha = np.random.uniform(0.7, 1.2)  # 对比度缩减系数
+        beta = np.random.randint(0, 30)      # 提升亮度
+        low_contrast_image = cv2.convertScaleAbs(blurred_image, alpha=alpha, beta=beta)
+    else:
+        low_contrast_image = blurred_image
+
+    return low_contrast_image
 def pad_tensor(input):
     
     height_org, width_org = input.shape[2], input.shape[3]
@@ -192,6 +235,8 @@ class UnalignedDataset(BaseDataset):
         B_path = self.B_paths[index % self.B_size]
         A_img = Image.open(A_path).convert('RGB')
         B_img = Image.open(B_path).convert('RGB')
+        if self.opt.simulate_underwater:
+            A_img = simulate_underwater_effect_pil(A_img)
         A_img = self.transform(A_img)
         B_img = self.transform(B_img)
         
@@ -219,6 +264,7 @@ class UnalignedDataset(BaseDataset):
                 input_img = input_img*2-1
             else:
                 input_img = A_img
+
             if self.opt.lighten:
                 B_img = (B_img + 1)/2.
                 B_img = (B_img - torch.min(B_img))/(torch.max(B_img) - torch.min(B_img))

@@ -32,7 +32,7 @@ def main():
         visuals = model.predict()
         img_path = model.get_image_paths()
         print('process image... %s' % img_path)
-        visualizer.save_images(webpage, visuals, img_path)
+        visualizer.save_images( visuals, img_path)
 
     webpage.save()
 

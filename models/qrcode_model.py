@@ -175,8 +175,10 @@ class CQRCodeGANModel(BaseModel):
         
         self.rec_A = self.netG_B.forward(self.fake_B)
         self.fake_A = self.netG_B.forward(self.real_B)
-        self.rec_B , self.latent_fake_A = self.netG_A.forward(self.fake_A)
-        
+        if self.opt.skip == 1:
+            self.rec_B , self.latent_fake_A = self.netG_A.forward(self.fake_A)
+        else:
+            self.rec_B = self.netG_A.forward(self.fake_A)
         if self.isTrain and self.opt.patch_D:
             # Calculate region widths and heights
             region_w = self.qrcode_position[:, 2] - self.qrcode_position[:, 0]
@@ -186,9 +188,12 @@ class CQRCodeGANModel(BaseModel):
             w_offset_max = torch.clamp(region_w - self.opt.patchSize, min=0)
             h_offset_max = torch.clamp(region_h - self.opt.patchSize, min=0)
             
+            # for i in range(self.qrcode_position.size(0)):
+            #     assert w_offset_max[i].item() >= 0
+            #     assert h_offset_max[i].item() >= 0
             # Generate random offsets
-            w_offsets = self.qrcode_position[:, 0] + torch.randint(0, (w_offset_max + 1).to(torch.int64), (self.qrcode_position.size(0),)).to(self.qrcode_position.device)  #生成batch_size大小的随机偏移
-            h_offsets = self.qrcode_position[:, 1] + torch.randint(0, (h_offset_max + 1).to(torch.int64), (self.qrcode_position.size(0),)).to(self.qrcode_position.device)
+            w_offsets = self.qrcode_position[:, 0] + torch.tensor([torch.randint(0, int((w_offset_max[i] + 1).item()),[1]) for i in range(self.qrcode_position.size(0))]).to(self.qrcode_position.device)  #生成batch_size大小的随机偏移
+            h_offsets = self.qrcode_position[:, 1] + torch.tensor([torch.randint(0, int((h_offset_max[i] + 1).item()),[1]) for i in range(self.qrcode_position.size(0))]).to(self.qrcode_position.device)
             
             # Clamp offsets to ensure they are within image boundaries
             w_offsets = torch.clamp(w_offsets, min=0, max=self.real_B.size(3) - self.opt.patchSize)  #设置patch的x1范围，防止出界
@@ -231,12 +236,9 @@ class CQRCodeGANModel(BaseModel):
 
                 for i in range(self.opt.patch_D_3):
                     # 重新计算偏移量，类似 patch_D 的逻辑
-                    w_offsets = self.qrcode_position[:, 0] + torch.randint(
-                        0, (w_offset_max + 1).to(torch.int64), (self.qrcode_position.size(0),)
-                    ).to(self.qrcode_position.device)
-                    h_offsets = self.qrcode_position[:, 1] + torch.randint(
-                        0, (h_offset_max + 1).to(torch.int64), (self.qrcode_position.size(0),)
-                    ).to(self.qrcode_position.device)
+                    w_offsets = self.qrcode_position[:, 0] + torch.tensor([torch.randint(0, int((w_offset_max[i] + 1).item()),[1]) for i in range(self.qrcode_position.size(0))]).to(self.qrcode_position.device)
+
+                    h_offsets = self.qrcode_position[:, 1] + torch.tensor([torch.randint(0, int((h_offset_max[i] + 1).item()),[1]) for i in range(self.qrcode_position.size(0))]).to(self.qrcode_position.device)
                     
                     # Clamp 偏移量以确保不会越界
                     w_offsets = torch.clamp(w_offsets, min=0, max=self.real_B.size(3) - self.opt.patchSize)
@@ -281,7 +283,7 @@ class CQRCodeGANModel(BaseModel):
             self.rec_B = self.netG_A.forward(self.fake_A)
 
     def predict(self):
-        self.real_A = Variable(self.input_A, volatile=True)
+        # self.real_A = Variable(self.input_A, volatile=True)
         # print(np.transpose(self.real_A.data[0].cpu().float().numpy(),(1,2,0))[:2][:2][:])
         if self.opt.skip == 1:
             self.fake_B, self.latent_real_A = self.netG_A.forward(self.real_A)
@@ -392,6 +394,8 @@ class CQRCodeGANModel(BaseModel):
             # G_A should be identity if real_B is fed.
             if self.opt.skip == 1:             
                 self.idt_A,self.latent_real_B = self.netG_A.forward(self.real_B)
+            else:
+                self.idt_A = self.netG_A.forward(self.real_B)
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
             # G_B should be identity if real_A is fed.
             self.idt_B = self.netG_B.forward(self.real_A)

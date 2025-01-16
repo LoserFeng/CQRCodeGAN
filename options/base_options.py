@@ -90,6 +90,8 @@ class BaseOptions():
         self.parser.add_argument('--lambda_identity', type=int, default=10, help='identity loss beltas')   # 一致性 
         self.parser.add_argument('--lighten', action='store_true', help='normalize attention map')
         self.parser.add_argument('--attention_model_path', default = './checkpoints/attention_model/best.pt', help='The path to yolov best.pt')
+        self.parser.add_argument('--simulate_underwater', action='store_true', help='为输入数据随机做水下变换')
+        # self.parser.add_argument('--attention_model_path', default = './checkpoints/attention_model/best.pt', help='The path to yolov best.pt')
         self.initialized = True
 
     def parse(self):
