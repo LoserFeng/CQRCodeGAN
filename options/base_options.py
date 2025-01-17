@@ -17,8 +17,8 @@ class BaseOptions():
 
         self.parser.add_argument('--batchSize', type=int, default=1, help='input batch size')
         self.parser.add_argument('--loadSize', type=int, default=286, help='scale images to this size')
-        self.parser.add_argument('--fineSize', type=int, default=256, help='then crop to this size')
-        self.parser.add_argument('--patchSize', type=int, default=64, help='then crop to this size')
+        self.parser.add_argument('--fineSize', type=int, default=256, help='这个是输入模型的图片大小，如果是patch，那就是patch的大小')
+        self.parser.add_argument('--patchSize', type=int, default=64, help='这个是Discriminator的patch大小')
         self.parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels')
         self.parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
         self.parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in first conv layer')
@@ -91,6 +91,15 @@ class BaseOptions():
         self.parser.add_argument('--lighten', action='store_true', help='normalize attention map')
         self.parser.add_argument('--attention_model_path', default = './checkpoints/attention_model/best.pt', help='The path to yolov best.pt')
         self.parser.add_argument('--simulate_underwater', action='store_true', help='为输入数据随机做水下变换')
+        self.parser.add_argument('--n_patch', type=int, default=2, help='对图像每条边做几等分,')  #等分的数量越多，相应的
+        # self.parser.add_argument('--patchSize', type=int, default=64, help='')
+        self.parser.add_argument('--edge_size', type=int ,default=0,help='提取patch前对图像额外增加的边缘大小') # 边缘的长度
+        self.parser.add_argument('--random_patch', action='store_true', help='训练的时候是否随机获取patch')
+        self.parser.add_argument('--transform', type=str, default='resize', help='选择数据增强方式')
+        self.parser.add_argument('--merge_D', action='store_true', help='使用合并Discriminitor，对合并的图像进行判别')
+        self.parser.add_argument('--random_crop', action='store_true', help='训练的时候是否使用随机的crop')
+        
+        
         # self.parser.add_argument('--attention_model_path', default = './checkpoints/attention_model/best.pt', help='The path to yolov best.pt')
         self.initialized = True
 

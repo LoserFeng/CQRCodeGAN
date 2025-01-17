@@ -18,7 +18,7 @@ def get_transform(opt):
     if opt.resize_or_crop == 'resize_and_crop':
         zoom = 1 + 0.1*random.randint(0,4)
         osize = [int(768*zoom), int(1024*zoom)]
-        transform_list.append(transforms.Resize(osize, Image.BICUBIC))
+        transform_list.append(transforms.Resize(osize, Image.NEAREST))
         transform_list.append(transforms.RandomCrop(opt.fineSize))
     elif opt.resize_or_crop == 'crop':
         transform_list.append(transforms.RandomCrop(opt.fineSize))
@@ -31,7 +31,11 @@ def get_transform(opt):
         transform_list.append(transforms.RandomCrop(opt.fineSize))  
     elif opt.resize_or_crop == 'no':
         osize = [opt.fineSize, opt.fineSize]
-        transform_list.append(transforms.Resize(osize, Image.BICUBIC))
+        transform_list.append(transforms.Resize(osize, Image.NEAREST)) #因为要对二维码进行插值，所以应该用NEAREST比较哦好
+    elif opt.resize_or_crop == 'resize':
+        osize = [opt.fineSize, opt.fineSize]
+        transform_list.append(transforms.Resize(osize, Image.NEAREST))  #音
+
 
     if opt.isTrain and not opt.no_flip:
         transform_list.append(transforms.RandomHorizontalFlip())
@@ -40,6 +44,30 @@ def get_transform(opt):
                        transforms.Normalize((0.5, 0.5, 0.5),
                                             (0.5, 0.5, 0.5))]
     return transforms.Compose(transform_list)
+
+
+def get_transforms(opt):
+    transform_list = []
+  
+
+    if opt.transform == 'resize_and_crop':
+
+        transform_list.append(transforms.RandomResizedCrop(opt.fineSize,scale=(0.08,1),interpolation=Image.BILINEAR))
+    elif opt.transform == 'resize':
+        osize = [opt.fineSize , opt.fineSize]
+        transform_list.append(transforms.Resize(osize, Image.NEAREST))
+    elif opt.transform == 'no':
+        ...
+        # do nothing
+    else:
+        raise NotImplementedError('transform [%s] is not found' % opt.transform)
+
+    transform_list += [transforms.ToTensor(),
+                       transforms.Normalize((0.5, 0.5, 0.5),
+                                            (0.5, 0.5, 0.5))]
+    return transforms.Compose(transform_list)
+
+
 
 def __scale_width(img, target_width):
     ow, oh = img.size

@@ -13,6 +13,10 @@ def CreateDataset(opt):
     elif opt.dataset_mode == 'unaligned_random_crop':
         from data.unaligned_random_crop import UnalignedDataset
         dataset = UnalignedDataset()
+    elif opt.dataset_mode == 'unaligned_patch':
+        from data.unaligned_patch_dataset import UnalignedDataset
+        dataset = UnalignedDataset()
+        
     elif opt.dataset_mode == 'pair':
         from data.pair_dataset import PairDataset
         dataset = PairDataset()

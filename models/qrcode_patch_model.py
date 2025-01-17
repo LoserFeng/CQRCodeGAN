@@ -15,11 +15,12 @@ import sys
 import random
 import torch
 import torch.nn.functional as F
+from einops import rearrange
 
 
-class CQRCodeGANModel(BaseModel):
+class CQRCodePatchGANModel(BaseModel):
     def name(self):
-        return 'CQRCodeGANModel'
+        return 'CQRCodePatchGANModel'
 
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
@@ -29,16 +30,23 @@ class CQRCodeGANModel(BaseModel):
         self.opt = opt
         # self.input_A = self.Tensor(nb, opt.input_nc, size, size)   # input image channels
         self.real_A = self.Tensor(nb, opt.input_nc, size, size)   # input image channels
+        self.orig_A = self.Tensor(nb, opt.input_nc, size, size)   # input image channels
         # self.input_B = self.Tensor(nb, opt.output_nc, size, size)  #then crop to this size
         self.real_B = self.Tensor(nb, opt.output_nc, size, size)  #then crop to this size
+        self.orig_B = self.Tensor(nb, opt.output_nc, size, size)  #then crop to this size
         
         self.input_img = self.Tensor(nb, opt.input_nc, size, size)
-        self.qrcode_position = self.Tensor(nb, 4)  # A的二维码的位置
+        self.A_qrcode_position = self.Tensor(nb, 4)  # A的二维码的位置
+        self.B_qrcode_position = self.Tensor(nb, 4)  # B的二维码的位置
         # self.input_A_gray = self.Tensor(nb, 1, size, size)  #attention
         self.real_patch_B_list = []
         self.fake_patch_B_list = []
         self.real_patch_A_list = []
         self.fake_patch_A_list = []
+        # self.A_crops = self.Tensor(nb, opt.num_A_crops, opt.input_nc, size, size)  # Initialize A_crops
+        # self.B_crops = self.Tensor(nb, opt.num_B_crops, opt.output_nc, size, size)  # Initialize B_crops
+        self.A_croped_region = self.Tensor(nb, 4)  # Initialize A_croped_region
+        self.B_croped_region = self.Tensor(nb, 4)  # Initialize B_croped_region
         
         if opt.vgg > 0:
             self.vgg_loss = networks.PerceptualLoss(opt)
@@ -50,7 +58,8 @@ class CQRCodeGANModel(BaseModel):
         # load/define networks
         # The naming conversion is different from those used in the paper
         # Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-
+        self.loss_D_A_patch = None
+        self.loss_D_B_patch = None
         skip = True if opt.skip > 0 else False
         self.netG_A = networks.define_G(opt.input_nc, opt.output_nc,
                                         opt.ngf, opt.which_model_netG, opt.norm, not opt.no_dropout, self.gpu_ids, skip=skip, opt=opt)
@@ -142,18 +151,28 @@ class CQRCodeGANModel(BaseModel):
         AtoB = self.opt.which_direction == 'AtoB'
         # _A = input['A' if AtoB else 'B']
         # input_B = input['B' if AtoB else 'A']
-        input_img = input['input_img']  # input_img就是A_img
+        input_img = input['A_img']  # input_img就是A_img
         # input_A_gray = input['A_gray']
         # self.input_A.resize_(input_A.size()).copy_(input_A)
         # self.input_A_gray.resize_(input_A_gray.size()).copy_(input_A_gray)
-        self.qrcode_position.resize_(input['qrcode_position'].size()).copy_(input['qrcode_position'])
+        self.A_qrcode_position.resize_(input['A_qrcode_position'].size()).copy_(input['A_qrcode_position'])
+        self.B_qrcode_position.resize_(input['B_qrcode_position'].size()).copy_(input['B_qrcode_position'])
+        
         # self.attention_img.resize_(input['attention_img'].size()).copy_(input['attention_img'])
         # self.input_B.resize_(input_B.size()).copy_(input_B)
+        
         self.input_img.resize_(input_img.size()).copy_(input_img)
-        real_A = input['A' if AtoB else 'B']
-        self.real_A.resize_(real_A.size()).copy_(real_A)
-        real_B = input['B' if AtoB else 'A']
-        self.real_B.resize_(real_B.size()).copy_(real_B)
+        orig_A = input['A_img' if AtoB else 'B_img']
+        self.orig_A.resize_(orig_A.size()).copy_(orig_A)
+        orig_B = input['B_img' if AtoB else 'A_img']
+        self.orig_B.resize_(orig_B.size()).copy_(orig_B)
+        # 帮我把A_crops的n_crops维度和
+        real_A= rearrange(input['A_crops'], 'b n c h w -> (b n) c h w')
+        real_B= rearrange(input['B_crops'], 'b n c h w -> (b n) c h w')
+        self.real_A.resize_(real_A.size()).copy_(real_A)  #
+        self.real_B.resize_(real_B.size()).copy_(real_B)  #
+        self.A_croped_region.resize_(input['A_croped_region'].size()).copy_(input['A_croped_region'])  # b 4
+        self.B_croped_region.resize_(input['B_croped_region'].size()).copy_(input['B_croped_region'])  # b 4
         
         
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
@@ -286,14 +305,38 @@ class CQRCodeGANModel(BaseModel):
         # self.real_A = Variable(self.input_A, volatile=True)
         # print(np.transpose(self.real_A.data[0].cpu().float().numpy(),(1,2,0))[:2][:2][:])
         if self.opt.skip == 1:
-            self.fake_B, self.latent_real_A = self.netG_A.forward(self.real_A)
+            fake_B_patches, latent_real_A = self.netG_A.forward(self.real_A)
         else:
-            self.fake_B = self.netG_A.forward(self.real_A)
-        self.rec_A = self.netG_B.forward(self.fake_B)
+            fake_B_patches = self.netG_A.forward(self.real_A)
+        rec_A_patches = self.netG_B.forward(fake_B_patches)
+        #按照self.opt.n_patch 对fake_B进行拼接
+        n_patches = self.opt.n_patch**2
+        fake_B_patches=rearrange(fake_B_patches, '(b n) c h w -> b n c h w',n=n_patches)
 
-        real_A = util.tensor2im(self.real_A.data)
-        fake_B = util.tensor2im(self.fake_B.data)
-        rec_A = util.tensor2im(self.rec_A.data)
+        b, n_patches, c, h, w = fake_B_patches.shape
+
+        # 计算每行每列的块数 (n_patch)
+        n_patch = int(self.opt.n_patch)
+        assert n_patch**2 == n_patches, "n_patches must be n_patch^2."
+
+        # 重排 fake_B_patches 为 (b, n_patch, n_patch, c, h, w)
+        fake_B_patches = rearrange(fake_B_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+
+        # 拼接块为完整的 fake_B
+        fake_B = rearrange(fake_B_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        
+        rec_A_patches=rearrange(rec_A_patches, '(b n) c h w -> b n c h w',n=n_patches)
+        rec_A_patches = rearrange(rec_A_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        rec_A = rearrange(rec_A_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        
+        real_A_patches = rearrange(self.real_A, '(b n) c h w -> b n c h w',n=n_patches)
+        real_A_patches = rearrange(real_A_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        real_A = rearrange(real_A_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        
+        
+        real_A = util.tensor2im(real_A)
+        fake_B = util.tensor2im(fake_B)
+        rec_A = util.tensor2im(rec_A)
         if self.opt.skip == 1:
             latent_real_A = util.tensor2im(self.latent_real_A.data)
             return OrderedDict([('real_A', real_A), ('fake_B', fake_B), ("latent_real_A", latent_real_A), ("rec_A", rec_A)])
@@ -507,41 +550,83 @@ class CQRCodeGANModel(BaseModel):
                                 ('D_B', D_B), ('G_B', G_B), ("vgg", vgg)])
 
     def get_current_visuals(self):
-        real_A = util.tensor2im(self.real_A.data)
-        fake_B = util.tensor2im(self.fake_B.data)
+        n_patches = self.opt.n_patch**2
+        # 将分块数据重新合并
+        fake_B_patches = rearrange(self.fake_B, "(b n) c h w -> b n c h w",n=n_patches)
+        rec_A_patches = rearrange(self.rec_A, "(b n) c h w -> b n c h w",n=n_patches)
+        fake_A_patches = rearrange(self.fake_A, "(b n) c h w -> b n c h w",n=n_patches)
+        rec_B_patches = rearrange(self.rec_B, "(b n) c h w -> b n c h w",n=n_patches)
+        b, n_patches, c, h, w = fake_B_patches.shape
+
+        # 计算每行和每列的块数
+        n_patch = int(self.opt.n_patch)
+        assert n_patch**2 == n_patches, "n_patches must be n_patch^2."
+
+        # 合并 fake_B 和 rec_A
+        fake_B_patches = rearrange(fake_B_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        fake_B = rearrange(fake_B_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        rec_A_patches = rearrange(rec_A_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        rec_A = rearrange(rec_A_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        fake_A_patches = rearrange(fake_A_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        fake_A = rearrange(fake_A_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        rec_B_patches = rearrange(rec_B_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        rec_B = rearrange(rec_B_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+
+        real_A_patches = rearrange(self.real_A, "(b n) c h w -> b n c h w",n=n_patches)
+        real_B_patches = rearrange(self.real_B, "(b n) c h w -> b n c h w",n=n_patches)
+        real_A_patches = rearrange(real_A_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        real_B_patches = rearrange(real_B_patches, "b (n_h n_w) c h w -> b n_h n_w c h w", n_h=n_patch, n_w=n_patch)
+        real_A = rearrange(real_A_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+        real_B = rearrange(real_B_patches, "b n_h n_w c h w -> b c (n_h h) (n_w w)")
+
+        # 转换为可视化格式
+        real_A = util.tensor2im(real_A)
+        fake_B = util.tensor2im(fake_B)
         if self.opt.skip > 0:
             latent_real_A = util.tensor2im(self.latent_real_A.data)
-        
-        real_B = util.tensor2im(self.real_B.data)
-        fake_A = util.tensor2im(self.fake_A.data)
-        
+
+        real_B = util.tensor2im(real_B)
+        fake_A = util.tensor2im(fake_A)
+
         if self.opt.lambda_A > 0.0:
-            rec_A = util.tensor2im(self.rec_A.data)
-            rec_B = util.tensor2im(self.rec_B.data)
+            rec_A = util.tensor2im(rec_A)
+            rec_B = util.tensor2im(rec_B)
             if self.opt.skip > 0:
                 latent_fake_A = util.tensor2im(self.latent_fake_A.data)
-                visuals = OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('latent_real_A', latent_real_A), ('rec_A', rec_A), 
-                                       ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B), ('latent_fake_A', latent_fake_A)])
+                visuals = OrderedDict([
+                    ('real_A', real_A), ('fake_B', fake_B), ('latent_real_A', latent_real_A),
+                    ('rec_A', rec_A), ('real_B', real_B), ('fake_A', fake_A),
+                    ('rec_B', rec_B), ('latent_fake_A', latent_fake_A)
+                ])
             else:
-                visuals = OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('rec_A', rec_A), 
-                                       ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B)])
+                visuals = OrderedDict([
+                    ('real_A', real_A), ('fake_B', fake_B), ('rec_A', rec_A),
+                    ('real_B', real_B), ('fake_A', fake_A), ('rec_B', rec_B)
+                ])
         else:
             if self.opt.skip > 0:
-                visuals = OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('latent_real_A', latent_real_A), 
-                                       ('real_B', real_B), ('fake_A', fake_A)])
+                visuals = OrderedDict([
+                    ('real_A', real_A), ('fake_B', fake_B), ('latent_real_A', latent_real_A),
+                    ('real_B', real_B), ('fake_A', fake_A)
+                ])
             else:
-                visuals = OrderedDict([('real_A', real_A), ('fake_B', fake_B),
-                                       ('real_B', real_B), ('fake_A', fake_A)])
-        
+                visuals = OrderedDict([
+                    ('real_A', real_A), ('fake_B', fake_B),
+                    ('real_B', real_B), ('fake_A', fake_A)
+                ])
+
         if self.opt.patch_D:
             real_patch_A = util.tensor2im(self.real_patch_A.data)
             fake_patch_A = util.tensor2im(self.fake_patch_A.data)
             real_patch_B = util.tensor2im(self.real_patch_B.data)
             fake_patch_B = util.tensor2im(self.fake_patch_B.data)
-            visuals.update({'real_patch_A': real_patch_A, 'fake_patch_A': fake_patch_A,
-                            'real_patch_B': real_patch_B, 'fake_patch_B': fake_patch_B})
-        
+            visuals.update({
+                'real_patch_A': real_patch_A, 'fake_patch_A': fake_patch_A,
+                'real_patch_B': real_patch_B, 'fake_patch_B': fake_patch_B
+            })
+
         return visuals
+
 
     def save(self, label):
         self.save_network(self.netG_A, 'G_A', label, self.gpu_ids)

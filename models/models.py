@@ -37,6 +37,10 @@ def create_model(opt):
         assert(opt.dataset_mode=='unaligned')
         from .qrcode_model import CQRCodeGANModel
         model=CQRCodeGANModel()
+    elif opt.model=='CQRCodePatchGAN':
+        assert(opt.dataset_mode=='unaligned_patch')
+        from .qrcode_patch_model import CQRCodePatchGANModel
+        model=CQRCodePatchGANModel()
     else:
         raise ValueError("Model [%s] not recognized." % opt.model)
     model.initialize(opt)
